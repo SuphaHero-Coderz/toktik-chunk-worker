@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "toktik-chunk-worker"
+version = "0.1.0"
+description = ""
+authors = ["Suphawit <suphawit.won@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+redis = "^5.0.1"
+moviepy = "^1.0.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
