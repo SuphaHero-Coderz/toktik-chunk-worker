@@ -3,6 +3,7 @@ import logging
 import json
 import uuid
 import redis
+from moviepy.editor import VideoFileClip
 
 LOG = logging
 REDIS_QUEUE_LOCATION = os.getenv('REDIS_QUEUE', 'localhost')
@@ -39,18 +40,27 @@ def watch_queue(redis_conn, queue_name, callback_func, timeout=30):
             except Exception:
                 LOG.exception('json.loads failed')
             if task:
-                callback_func(task)
+                callback_func(task["name"])
 
 
-def execute_factor(log, task):
-    number = task.get('number')
-    if number:
-        number = int(number)
-        log.info('Factoring %d', number)
-        factors = [trial for trial in range(1, number + 1) if number % trial == 0]
-        log.info('Done, factors = %s', factors)
-    else:
-        log.info('No number given.')
+def execute_chunk(file_path: str):
+    current_duration = VideoFileClip(file_path).duration
+    divide_into_count = 5
+    single_duration = current_duration / divide_into_count
+
+    while current_duration > single_duration:
+        clip = VideoFileClip(file_path).subclip(current_duration - single_duration, current_duration)
+        current_duration -= single_duration
+        current_video = f"{current_duration}.mp4"
+        clip.to_videofile(current_video, codec="libx264", temp_audiofile='temp-audio.m4a', remove_temp=True,
+                          audio_codec='aac')
+        print("-----------------###-----------------")
+    clip = VideoFileClip(file_path).subclip(0, current_duration)
+    current_duration -= single_duration
+    current_video = f"0.mp4"
+    clip.to_videofile(current_video, codec="libx264", temp_audiofile='temp-audio.m4a', remove_temp=True,
+                      audio_codec='aac')
+    print("-----------------###-----------------")
 
 
 def main():
@@ -68,7 +78,7 @@ def main():
     watch_queue(
         redis_conn,
         QUEUE_NAME,
-        lambda task: named_logging.info('Task: %s', task))
+        execute_chunk)
 
 
 if __name__ == '__main__':
