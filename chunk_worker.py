@@ -5,8 +5,10 @@ import uuid
 import redis
 from moviepy.editor import VideoFileClip
 
+# Redis Credentials
 LOG = logging
 REDIS_QUEUE_LOCATION = os.getenv('REDIS_QUEUE', 'localhost')
+# Queue_name which is identical to the one in chunk() in the backend, this worker listen to this queue
 QUEUE_NAME = 'queue:chunk'
 
 INSTANCE_NAME = uuid.uuid4().hex
@@ -17,6 +19,7 @@ LOG.basicConfig(
 )
 
 
+# function to watch the workqueue and fetch work when exist
 def watch_queue(redis_conn, queue_name, callback_func, timeout=30):
     active = True
 
@@ -40,16 +43,19 @@ def watch_queue(redis_conn, queue_name, callback_func, timeout=30):
             except Exception:
                 LOG.exception('json.loads failed')
                 redis_conn.publish("chunk", "chunk_ok")
+            # publish message back to the broker and call chunk function on the task
             if task:
                 callback_func(task["name"])
                 redis_conn.publish("chunk", "chunk_ok")
 
 
+# the actual chunking process, using moviepy
 def execute_chunk(file_path: str):
     current_duration = VideoFileClip(file_path).duration
     divide_into_count = 5
     single_duration = current_duration / divide_into_count
 
+    # loop and create sub clips (chunking)
     while current_duration > single_duration:
         clip = VideoFileClip(file_path).subclip(current_duration - single_duration, current_duration)
         current_duration -= single_duration
