@@ -39,8 +39,10 @@ def watch_queue(redis_conn, queue_name, callback_func, timeout=30):
                 task = json.loads(packed_task)
             except Exception:
                 LOG.exception('json.loads failed')
+                redis_conn.publish("chunk", "chunk_ok")
             if task:
                 callback_func(task["name"])
+                redis_conn.publish("chunk", "chunk_ok")
 
 
 def execute_chunk(file_path: str):
