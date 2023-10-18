@@ -1,5 +1,5 @@
 # Build upon this image "alpine" is a lightweight distro
-FROM python:3.11
+FROM python:3.11-slim
 
 # Install all the requirements
 COPY requirements.txt /app/requirements.txt
