@@ -1,2 +1,4 @@
 redis
 moviepy
+boto3
+ffmpeg-python

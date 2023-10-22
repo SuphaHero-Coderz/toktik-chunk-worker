@@ -3,6 +3,9 @@ import logging
 import json
 import uuid
 import redis
+import ffmpeg
+import boto3
+import botocore
 from moviepy.editor import VideoFileClip
 
 # Redis Credentials
@@ -16,6 +19,11 @@ INSTANCE_NAME = uuid.uuid4().hex
 LOG.basicConfig(
     level=LOG.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+s3 = boto3.client('s3', 
+    aws_access_key_id = os.getenv("AWS_ACCESS_KEY"),
+    aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY"),
 )
 
 
@@ -42,34 +50,64 @@ def watch_queue(redis_conn, queue_name, callback_func, timeout=30):
                 task = json.loads(packed_task)
             except Exception:
                 LOG.exception('json.loads failed')
-                redis_conn.publish("chunk", "chunk_ok")
-            # publish message back to the broker and call chunk function on the task
+                data = { "status" : -1, "message" : "An error occurred" }
+                redis_conn.publish("chunk", json.dumps(data))
             if task:
-                callback_func(task["name"])
-                redis_conn.publish("chunk", "chunk_ok")
+                callback_func(task["object_key"])
+                data = { "status" : 1, "message" : "Successfully chunked video" }
+                redis_conn.publish("chunk", json.dumps(data))
 
+def download_video(object_key: str):
+    try:
+        LOG.info("Downloading file from S3 for chunking")
+        s3.download_file(os.getenv("BUCKET_NAME"), f"{object_key}/encoded.mp4", "encoded.mp4")
+    except botocore.exceptions.ClientError as e:
+        if e.response['Error']['Code'] == "404":
+            LOG.error("ERROR: file was not found on S3")
+        else:
+            LOG.error("ERROR: file download")
+            raise
 
-# the actual chunking process, using moviepy
-def execute_chunk(file_path: str):
-    current_duration = VideoFileClip(file_path).duration
-    divide_into_count = 5
-    single_duration = current_duration / divide_into_count
+def delete_video(object_key: str):
+    LOG.info("Deleting original video")
+    response = s3.delete_object(Bucket=os.getenv("BUCKET_NAME"), Key=object_key)
+    LOG.info(response)
 
-    # loop and create sub clips (chunking)
-    while current_duration > single_duration:
-        clip = VideoFileClip(file_path).subclip(current_duration - single_duration, current_duration)
-        current_duration -= single_duration
-        current_video = f"{current_duration}.mp4"
-        clip.to_videofile(current_video, codec="libx264", temp_audiofile='temp-audio.m4a', remove_temp=True,
-                          audio_codec='aac')
-        print("-----------------###-----------------")
-    clip = VideoFileClip(file_path).subclip(0, current_duration)
-    current_duration -= single_duration
-    current_video = f"0.mp4"
-    clip.to_videofile(current_video, codec="libx264", temp_audiofile='temp-audio.m4a', remove_temp=True,
-                      audio_codec='aac')
-    print("-----------------###-----------------")
+def upload_chunks(object_key: str):
+    print("===")
+    print(os.listdir("."))
+    print(os.listdir("./chunks"))
+    print("===")
+    LOG.info("Uploading chunks video")
+    try:
+        for file in os.listdir("./chunks"):
+            s3.upload_file(f"./chunks/{file}", os.getenv("BUCKET_NAME"), f"{object_key}/chunks/{file}")
+            LOG.info("Successfully uploaded chunk {file}")
+    except botocore.exceptions.ClientError as e:
+        LOG.error(e)
 
+def chunk_video():
+    clip = VideoFileClip("encoded.mp4").filename.split('.')[0]
+    input_stream = ffmpeg.input("encoded.mp4", f='mp4')
+    output_stream = ffmpeg.output(input_stream, f'./chunks/{clip}.m3u8', format='hls', start_number=0, hls_time=10, hls_list_size=0)
+    ffmpeg.run(output_stream)
+
+def cleanup():
+    try:
+        os.remove("./encoded.mp4")
+        for file in os.listdir("./chunks"):
+            file_path = f"./chunks/{file}"
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+        LOG.info("All files deleted successfully.")
+    except OSError:
+        LOG.error("Error occurred while deleting files.")
+
+def execute_chunk(object_key: str):
+    download_video(object_key)
+    chunk_video()
+    upload_chunks(object_key)
+    cleanup()
 
 def main():
     LOG.info('Starting a worker...')
