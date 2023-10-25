@@ -55,7 +55,7 @@ def watch_queue(redis_conn, queue_name, callback_func, timeout=30):
             if task:
                 callback_func(task["object_key"])
                 data = { "status" : 1, "message" : "Successfully chunked video" }
-                redis_conn.publish("chunk", json.dumps(data))
+                redis_conn.publish("chunk", json.dumps(task))
 
 def download_video(object_key: str):
     try:
@@ -104,6 +104,7 @@ def cleanup():
         LOG.error("Error occurred while deleting files.")
 
 def execute_chunk(object_key: str):
+    #print("execute chunk")
     download_video(object_key)
     chunk_video()
     upload_chunks(object_key)
