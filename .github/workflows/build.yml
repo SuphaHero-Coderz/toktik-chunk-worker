@@ -1,0 +1,50 @@
+name: Build Chunk CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  REGISTRY: ghcr.io
+  BASE_IMG_NAME: ${{ github.repository }}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+    - name: Check out the repo
+      uses: actions/checkout@v3
+    - name: set lower case repo name
+      run: |
+        echo "IMG_LC=${IMG,,}" >>${GITHUB_ENV}
+      env:
+        IMG: '${{ github.repository }}'
+    - name: set lower case owner name
+      run: |
+        echo "OWNER_LC=${OWNER,,}" >>${GITHUB_ENV}
+      env:
+        OWNER: '${{ github.repository_owner }}'
+    - name: Log in to the container registry
+      uses: docker/login-action@v2
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ env.OWNER_LC }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Derive short SHA name
+      id: vars
+      run: |
+        sha=$(git rev-parse --short HEAD)
+        echo "sha_short=$sha" >> $GITHUB_OUTPUT
+    - name: Build the Docker image
+      run: |
+        docker build . --file Dockerfile \
+        --tag ghcr.io/${{ env.IMG_LC }}:${{ steps.vars.outputs.sha_short }} \
+        --tag ghcr.io/${{ env.IMG_LC }}:latest
+    - name: Publish the images
+      run: | 
+        docker push ghcr.io/${{ env.IMG_LC }}:${{ steps.vars.outputs.sha_short }}
+        docker push ghcr.io/${{ env.IMG_LC }}:latest
