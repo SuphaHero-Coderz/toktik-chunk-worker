@@ -11,6 +11,7 @@ from moviepy.editor import VideoFileClip
 # Redis Credentials
 LOG = logging
 REDIS_QUEUE_LOCATION = os.getenv('REDIS_QUEUE', 'localhost')
+
 # Queue_name which is identical to the one in chunk() in the backend, this worker listen to this queue
 QUEUE_NAME = 'queue:chunk'
 
@@ -79,7 +80,7 @@ def delete_converted_video(object_key: str):
     Deletes the encoded mp4 file on S3.
     """
     LOG.info("Deleting converted video from S3.")
-    response = s3.delete_object(Bucket=os.getenv("BUCKET_NAME"), Key=f"{object_key}/ENCODED_FILENAME")
+    response = s3.delete_object(Bucket=os.getenv("BUCKET_NAME"), Key=f"{object_key}/{ENCODED_FILENAME}")
     LOG.info(response)
 
 def upload_chunks(object_key: str):
