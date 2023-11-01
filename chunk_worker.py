@@ -7,6 +7,7 @@ import ffmpeg
 import boto3
 import botocore
 from moviepy.editor import VideoFileClip
+from tenacity import retry, stop_after_attempt
 
 # Redis Credentials
 LOG = logging
@@ -61,6 +62,7 @@ def watch_queue(redis_conn, queue_name, callback_func, timeout=30):
                 data = { "status" : 1, "message" : "Successfully chunked video" }
                 redis_conn.publish("chunk", json.dumps(task))
 
+@retry(stop=stop_after_attempt(5))
 def download_video(object_key: str):
     """
     Downloads encoded file from S3.
@@ -75,6 +77,7 @@ def download_video(object_key: str):
             LOG.error("ERROR: file download")
             raise
 
+@retry(stop=stop_after_attempt(5))
 def delete_converted_video(object_key: str):
     """
     Deletes the encoded mp4 file on S3.
@@ -83,6 +86,7 @@ def delete_converted_video(object_key: str):
     response = s3.delete_object(Bucket=os.getenv("BUCKET_NAME"), Key=f"{object_key}/{ENCODED_FILENAME}")
     LOG.info(response)
 
+@retry(stop=stop_after_attempt(5))
 def upload_chunks(object_key: str):
     """
     Uploads chunks to S3.
@@ -95,6 +99,7 @@ def upload_chunks(object_key: str):
     except botocore.exceptions.ClientError as e:
         LOG.error(e)
 
+@retry(stop=stop_after_attempt(5))
 def chunk_video():
     """
     Chunks an encoded video into an HLS stream with 10 second chunks.
@@ -108,6 +113,7 @@ def cleanup():
     """
     Deletes files involved in the thumbnail creation -- encoded video and thumbnail itself -- after uploading.
     """
+    @retry(stop=stop_after_attempt(5))
     def delete_file(filepath: str):
         try:
             os.remove(filepath)
