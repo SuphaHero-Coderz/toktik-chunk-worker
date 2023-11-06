@@ -3,3 +3,4 @@ moviepy
 boto3
 ffmpeg-python
 tenacity
+python-dotenv
