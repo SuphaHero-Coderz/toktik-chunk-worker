@@ -8,6 +8,9 @@ import boto3
 import botocore
 from moviepy.editor import VideoFileClip
 from tenacity import retry, stop_after_attempt
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Redis Credentials
 LOG = logging
